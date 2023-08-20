@@ -1,93 +1,121 @@
 //+------------------------------------------------------------------+
-//|                                                          RSI.mq5 |
-//|                                  Copyright 2023, MetaQuotes Ltd. |
-//|                                             https://www.mql5.com |
+//|                                                     RSI Example  |
+//|                                    Copyright 2023, MetaQuotes Ltd.|
+//|                                             https://www.mql5.com|
 //+------------------------------------------------------------------+
-#property copyright "Copyright 2023, MetaQuotes Ltd."
+#property copyright "2023, MetaQuotes Ltd."
 #property link "https://www.mql5.com"
 #property version "1.00"
+#property indicator_separate_window
+#property indicator_buffers 1
+#property indicator_color1 Lime
 
-//+------------------------------------------------------------------+
-//| Include                                                          |
-//+------------------------------------------------------------------+
 #include <Trade/Trade.mqh>
-
-//+------------------------------------------------------------------+
-//| Inputs                                                           |
-//+------------------------------------------------------------------+
-static input long InpMagicNumber = 546812; // magic number
-static input double InpLotSize = 0.01;     // lot size
-input int InpRSIPeriod = 21;               // rsi period
-input int InpRSILevel = 70;                // rsi upper level
-input int InpStopLoss = 200;               // stop loss in point (0=off)
-input int InpTakeProfit = 100;             // take profit in points (0=off)
-input bool InpCloseSignal = false;         // close trades by opposite signal
-
-//+------------------------------------------------------------------+
-//| Global variables                                                 |
-//+------------------------------------------------------------------+
-int handle;
-double buffer[];
-MqlTick currentTick;
 CTrade trade;
-datetime openTimeBuy = 0;
-datetime openTimeSell = 0;
+
+//--- input parameters
+input int RSI_Period = 14;       // RSI period
+input int Overbought_Level = 70; // Overbought level
+input int Oversold_Level = 30;   // Oversold level
+
+//--- indicator buffers
+double ExtRSIBuffer[];
+
 //+------------------------------------------------------------------+
-//| Expert initialization function                                   |
+//| Custom indicator initialization function                         |
 //+------------------------------------------------------------------+
 int OnInit()
 {
-  // Check user inputs
-  if (InpMagicNumber <= 0)
-  {
-    Alert("Magic number <= 0");
-    return INIT_PARAMETERS_INCORRECT;
-  }
+  // Indicator buffer
+  SetIndexBuffer(0, ExtRSIBuffer);
+  SetIndexLabel(0, "RSI");
 
-  if (InpLotSize <= 0 || InpLotSize > 10)
-  {
-    Alert("Lot size <= 0 or > 10");
-    return INIT_PARAMETERS_INCORRECT;
-  }
-
-  if (InpRSIPeriod <= 1)
-  {
-    Alert("RSI period <= 1");
-    return INIT_PARAMETERS_INCORRECT;
-  }
-
-  if (InpRSILevel >= 100 || InpRSILevel <= 50)
-  {
-    Alert("RSI level >= 100 or <= 50 ");
-    return INIT_PARAMETERS_INCORRECT;
-  }
-
-  if (InpStopLoss < 0)
-  {
-    Alert("Stop Loss < 0 ");
-    return INIT_PARAMETERS_INCORRECT;
-  }
-
-  if (InpTakeProfit < 0)
-  {
-    Alert("Take profit >= 100 or <= 50 ");
-    return INIT_PARAMETERS_INCORRECT;
-  }
+  // Set index style
+  SetIndexStyle(0, DRAW_LINE);
 
   return (INIT_SUCCEEDED);
 }
-//+------------------------------------------------------------------+
-//| Expert deinitialization function                                 |
-//+------------------------------------------------------------------+
+
 void OnDeinit(const int reason)
 {
-  //---
+  Print("OnDeinit");
 }
+
 //+------------------------------------------------------------------+
-//| Expert tick function                                             |
+//| Custom indicator iteration function                              |
 //+------------------------------------------------------------------+
-void OnTick()
+int OnCalculate(const int rates_total,
+                const int prev_calculated,
+                const datetime &time[],
+                const double &open[],
+                const double &high[],
+                const double &low[],
+                const double &close[],
+                const long &tick_volume[],
+                const long &volume[],
+                const int &spread[])
 {
-  //---
+  int begin = RSI_Period;
+  if (rates_total <= begin)
+    return (0);
+
+  // Calculate RSI
+  for (int i = begin; i >= 0; i--)
+  {
+    double avg_gain = 0, avg_loss = 0;
+    for (int j = i; j < i + RSI_Period; j++)
+    {
+      double diff = close[j] - close[j - 1];
+      if (diff > 0)
+        avg_gain += diff;
+      else
+        avg_loss -= diff;
+    }
+
+    if (avg_loss > 0)
+      avg_loss /= RSI_Period;
+    else
+      avg_loss = 0;
+
+    if (avg_gain > 0)
+      avg_gain /= RSI_Period;
+    else
+      avg_gain = 0;
+
+    double rs = 0;
+    if (avg_loss != 0)
+      rs = avg_gain / avg_loss;
+    else
+      rs = 100.0;
+
+    ExtRSIBuffer[i] = 100.0 - (100.0 / (1 + rs));
+  }
+
+  // Generate buy/sell signals based on RSI conditions
+  for (int i = RSI_Period; i >= 0; i--)
+  {
+    // Check for overbought condition
+    if (ExtRSIBuffer[i] > Overbought_Level)
+    {
+      // Generate a sell signal or take-profit for existing buy positions
+      // Your trade execution logic goes here...
+      
+    }
+    // Check for oversold condition
+    else if (ExtRSIBuffer[i] < Oversold_Level)
+    {
+      // Generate a buy signal or take-profit for existing sell positions
+      // Your trade execution logic goes here...
+      double bid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
+      double sl = bid + 100 * SymbolInfoDouble(_Symbol, SYMBOL_POINT);
+      double tp = bid - 100 * SymbolInfoDouble(_Symbol, SYMBOL_POINT);
+      trade.Buy(0.01, _Symbol, bid, sl, tp, "This is a buy signal");
+    }
+
+    // Check for bullish or bearish divergence
+    // Your divergence detection logic goes here...
+  }
+
+  return (rates_total);
 }
 //+------------------------------------------------------------------+
